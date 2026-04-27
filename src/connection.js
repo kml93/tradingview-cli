@@ -1,11 +1,17 @@
 import CDP from 'chrome-remote-interface';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, statSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+const CACHE_FILE = join(tmpdir(), '.tv-cdp-port');
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CDP_HOST = 'localhost';
+const DEFAULT_PORTS = [9222, 9223, 9224, 9225];
+const MAX_RETRIES = 5;
+const BASE_DELAY = 500;
 
 let client = null;
 let targetInfo = null;
-const CDP_HOST = 'localhost';
-const CDP_PORT = 9222;
-const MAX_RETRIES = 5;
-const BASE_DELAY = 500;
 
 // Known direct API paths discovered via live probing (see PROBE_RESULTS.md)
 const KNOWN_PATHS = {
@@ -47,6 +53,60 @@ export function requireFinite(value, name) {
   return n;
 }
 
+async function probePort(port) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2000);
+  try {
+    const resp = await fetch(`http://${CDP_HOST}:${port}/json/version`, { signal: controller.signal });
+    const info = await resp.json();
+    const ua = info['User-Agent'] || info.Browser || '';
+    return ua.includes('TVDesktop') || ua.includes('TradingView') ? port : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function readCachedPort() {
+  try {
+    if (!existsSync(CACHE_FILE)) return null;
+    const { port, ts } = JSON.parse(readFileSync(CACHE_FILE, 'utf-8'));
+    if (Date.now() - ts > CACHE_TTL_MS) return null;
+    return port;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedPort(port) {
+  try {
+    writeFileSync(CACHE_FILE, JSON.stringify({ port, ts: Date.now() }));
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function getCdpPort() {
+  if (process.env.CDP_PORT) return parseInt(process.env.CDP_PORT);
+
+  const cached = readCachedPort();
+  if (cached) {
+    const probe = await probePort(cached);
+    if (probe) return cached;
+  }
+
+  for (const port of DEFAULT_PORTS) {
+    const found = await probePort(port);
+    if (found) {
+      writeCachedPort(found);
+      return found;
+    }
+  }
+
+  throw new Error(`TradingView not found on ports ${DEFAULT_PORTS.join(', ')}. ` + `Ensure TradingView Desktop is running with --remote-debugging-port.`);
+}
+
 export async function getClient() {
   if (client) {
     try {
@@ -65,12 +125,13 @@ export async function connect() {
   let lastError;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const target = await findChartTarget();
+      const port = await getCdpPort();
+      const target = await findChartTarget(port);
       if (!target) {
         throw new Error('No TradingView chart target found. Is TradingView open with a chart?');
       }
       targetInfo = target;
-      client = await CDP({ host: CDP_HOST, port: CDP_PORT, target: target.id });
+      client = await CDP({ host: CDP_HOST, port, target: target.id });
 
       // Enable required domains
       await client.Runtime.enable();
@@ -81,19 +142,17 @@ export async function connect() {
     } catch (err) {
       lastError = err;
       const delay = Math.min(BASE_DELAY * Math.pow(2, attempt), 30000);
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
   throw new Error(`CDP connection failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
 }
 
-async function findChartTarget() {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+async function findChartTarget(port) {
+  const resp = await fetch(`http://${CDP_HOST}:${port}/json/list`);
   const targets = await resp.json();
   // Prefer targets with tradingview.com/chart in the URL
-  return targets.find(t => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
-    || targets.find(t => t.type === 'page' && /tradingview/i.test(t.url))
-    || null;
+  return targets.find((t) => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url)) || targets.find((t) => t.type === 'page' && /tradingview/i.test(t.url)) || null;
 }
 
 export async function getTargetInfo() {
@@ -112,9 +171,7 @@ export async function evaluate(expression, opts = {}) {
     ...opts,
   });
   if (result.exceptionDetails) {
-    const msg = result.exceptionDetails.exception?.description
-      || result.exceptionDetails.text
-      || 'Unknown evaluation error';
+    const msg = result.exceptionDetails.exception?.description || result.exceptionDetails.text || 'Unknown evaluation error';
     throw new Error(`JS evaluation error: ${msg}`);
   }
   return result.result?.value;
@@ -126,7 +183,9 @@ export async function evaluateAsync(expression) {
 
 export async function disconnect() {
   if (client) {
-    try { await client.close(); } catch {}
+    try {
+      await client.close();
+    } catch {}
     client = null;
     targetInfo = null;
   }

@@ -2,20 +2,20 @@
  * Core tab management logic.
  * Controls TradingView Desktop tabs via CDP and Electron keyboard shortcuts.
  */
-import { getClient, evaluate } from '../connection.js';
+import { getClient, getCdpPort } from '../connection.js';
 
 const CDP_HOST = 'localhost';
-const CDP_PORT = 9222;
 
 /**
  * List all open chart tabs (CDP page targets).
  */
 export async function list() {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+  const port = await getCdpPort();
+  const resp = await fetch(`http://${CDP_HOST}:${port}/json/list`);
   const targets = await resp.json();
 
   const tabs = targets
-    .filter(t => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
+    .filter((t) => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
     .map((t, i) => ({
       index: i,
       id: t.id,
@@ -36,7 +36,7 @@ export async function newTab() {
   // Electron/TradingView Desktop uses Ctrl+T for new tab on macOS too
   // But some versions use Cmd+T
   const isMac = process.platform === 'darwin';
-  const mod = isMac ? 4 : 2; // 4 = meta (Cmd), 2 = ctrl
+  const mod = isMac ? 4 : 2;
 
   await c.Input.dispatchKeyEvent({
     type: 'keyDown',
@@ -47,7 +47,7 @@ export async function newTab() {
   });
   await c.Input.dispatchKeyEvent({ type: 'keyUp', key: 't', code: 'KeyT' });
 
-  await new Promise(r => setTimeout(r, 2000));
+  await new Promise((r) => setTimeout(r, 2000));
 
   // Verify a new tab appeared
   const state = await list();
@@ -76,7 +76,7 @@ export async function closeTab() {
   });
   await c.Input.dispatchKeyEvent({ type: 'keyUp', key: 'w', code: 'KeyW' });
 
-  await new Promise(r => setTimeout(r, 1000));
+  await new Promise((r) => setTimeout(r, 1000));
 
   const after = await list();
   return { success: true, action: 'tab_closed', tabs_before: before.tab_count, tabs_after: after.tab_count };
@@ -94,11 +94,11 @@ export async function switchTab({ index }) {
   }
 
   const target = tabs.tabs[idx];
+  const port = await getCdpPort();
 
   // Use CDP Target.activateTarget to bring the tab to front
   try {
-    const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/activate/${target.id}`);
-    const text = await resp.text();
+    await fetch(`http://${CDP_HOST}:${port}/json/activate/${target.id}`);
     return { success: true, action: 'switched', index: idx, tab_id: target.id, chart_id: target.chart_id };
   } catch (e) {
     throw new Error(`Failed to activate tab ${idx}: ${e.message}`);
