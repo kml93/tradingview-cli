@@ -1,5 +1,5 @@
 ---
-name: tradingview-chart
+name: tradingview
 description: >-
   TradingView Desktop control via CLI. Use when working with charts, Pine Script, indicators, replay, screenshots, price data, or any TradingView interaction. Trigger phrases: "tradingview", "my chart", "pine script", "tv", "screenshot chart", "what's the price", "change symbol", "indicators".
 ---
