@@ -79,10 +79,10 @@ tv data labels              # empty = crash
 tv data boxes               # empty = crash
 tv values                   # empty = crash
 
-# 2. Add debug via table in Pine code:
-#    table.cell(tbl, 0, row, "DBG", text_color = color.yellow)
-#    If table shows → script runs but logic is wrong
-#    If table doesn't show → crash before render
+# 2. Add debug via label on barstate.islast ONLY:
+#    label.new(bar_index, low, "DBG: " + str.tostring(someVar), ...)
+#    If label shows → script runs but logic is wrong
+#    If label doesn't show → crash before render
 
 # 3. Deploy a minimal version (no UDTs) to isolate:
 #    - If minimal version works → issue is in UDTs/logic
@@ -90,19 +90,71 @@ tv values                   # empty = crash
 ```
 
 **Common runtime errors:**
-- **RE10045**: `array.get()` index out of bounds → often caused by `syminfo.mintick = na` on bar 0
+- **RE10045**: `array.get()` index out of bounds → often caused by `syminfo.mintick = na` on bar 0, or `for i = 0 to -1` executing one iteration
 - **Silent timeout**: free plan = 20s max → O(n²) sort on every historical bar = timeout
 
-## Adding Indicator to Chart
+## Adding/Updating Indicator on Chart
 
-The "Add to chart" button in Pine Editor can be unreliable. Reliable workflow:
+### Reliable Workflow: Add New Indicator
 
 ```bash
-# After successful compilation, click via JS eval:
-tv ui eval --js "const addBtn = [...document.querySelectorAll('button')].find(b => b.textContent.includes('Add to chart') && !b.textContent.includes('Saved') && b.offsetParent !== null); if (addBtn) { addBtn.click(); 'Clicked'; } else { 'Not found'; }"
+# 1. Remove existing indicators from chart (free up slots)
+tv indicator remove --id <entity_id>     # get ID from tv state
 
-# If "Cannot add unsaved script" dialog appears:
-tv pine save && sleep 2 && tv ui eval --js "const saveAddBtn = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Save and add to chart'); if (saveAddBtn) { saveAddBtn.click(); 'Clicked'; } else { 'Not found'; }"
+# 2. Ensure chart is clean
+tv state  # verify study_count = 0
+
+# 3. Open an EXISTING saved script in Pine Editor
+tv pine open --name "Test SMA"  # or any sacrificial script
+
+# 4. Inject your code
+tv pine set -f /path/to/script.pine
+
+# 5. Compile — this will add the script to chart if `study_added: true` or update the script on chart if `study_added: false`
+tv pine compile
+
+# 6. Verify
+tv state
+```
+
+### Reliable Workflow: Update Existing Indicator
+
+When the indicator is already on the chart and you modified the code:
+
+```bash
+# 1. Inject updated code
+tv pine set -f /path/to/script.pine
+
+# 2. Compile (this auto-updates the indicator on chart)
+tv pine compile
+
+# 3. Verify no runtime errors
+tv pine console
+tv data tables
+tv data labels
+```
+
+### Why `tv pine new indicator` is Unreliable
+
+It creates a new unsaved tab. The editor doesn't have a save target, so "Save and add" may fail. Always `open` an existing script first, then overwrite its content.
+
+## Checking Runtime After Compilation
+
+**ALWAYS check runtime after a successful compilation.** This is critical:
+
+```bash
+# Step 1: Compile
+tv pine compile
+
+# Step 2: If compilation succeeded (has_errors: false), CHECK RUNTIME:
+tv pine console   # Check for runtime error entries
+tv data tables    # Verify tables are rendered
+tv data labels    # Verify labels exist
+tv data boxes     # Verify boxes exist
+tv data lines     # Verify lines exist
+
+# Step 3: If all data commands return 0 items despite compilation success:
+# → The indicator crashed at runtime. Check Pine Script console for error messages.
 ```
 
 ## Common Pine Errors
@@ -113,31 +165,6 @@ tv pine save && sleep 2 && tv ui eval --js "const saveAddBtn = [...document.quer
 - **"Cannot call X with argument type Y"** → wrong parameter type
 - **"The script is too long"** → simplify or split logic
 
-## Script Template
-
-```pine
-//@version=6
-indicator("My Indicator", overlay = true)
-
-// Inputs
-length = input.int(14, "Length", minval = 1)
-src = input.source(close, "Source")
-
-// Calculation
-value = ta.sma(src, length)
-
-// Plot
-plot(value, "SMA", color.blue, 2)
-```
-
-## Important Notes
-
-- Always compile after every change — never claim "done" without a clean compile
-- Use `tv pine console` to read `log.info()` debug output
-- `tv pine get` can return 200KB+ for complex scripts — avoid unless editing
-- `tv pine analyze` and `tv pine check` work without a chart (offline tools)
-- `tv pine console` does NOT show runtime errors (RE codes) — see Runtime Debugging section
-
 ## Pine Editor Tab Management
 
 The Pine Editor has multiple tabs. `tv pine set` writes to the currently visible tab but does NOT update the editor's internal model state. This causes issues:
@@ -146,32 +173,6 @@ The Pine Editor has multiple tabs. `tv pine set` writes to the currently visible
 2. **"Add to chart" triggers "unsaved changes" dialog** — because the editor detects a diff between its model and the visible text
 3. **Multiple tabs confusion** — `tv pine open` opens a script but the active tab might differ
 
-**Reliable workflow for deploying a new script:**
-```bash
-# 1. Remove existing indicator from chart (free up slot)
-tv indicator remove --id <entity_id>     # from tv state
-
-# 2. Open an EXISTING saved script (not "new") — this ensures a proper save target
-tv pine open --name "Test SMA"           # or any sacrificial script
-
-# 3. Inject your code
-tv pine set -f /path/to/script.pine
-
-# 4. Compile (this triggers save in the Pine Editor)
-tv pine compile
-
-# 5. Add to chart via JS eval (more reliable than CLI button click)
-tv ui eval --js "const addChartBtn = [...document.querySelectorAll('button')].find(b => b.textContent.includes('Add to chart') && !b.textContent.includes('Saved') && b.offsetParent !== null); if (addChartBtn) { addChartBtn.click(); 'Clicked'; } else { 'Not found'; }"
-
-# 6. If dialog "Cannot add unsaved changes" appears:
-tv ui eval --js "const saveAndAddBtn = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Save and add to chart'); if (saveAndAddBtn) { saveAndAddBtn.click(); 'Clicked'; } else { 'Not found'; }"
-
-# 7. Wait and verify
-sleep 3 && tv state
-```
-
-**Why `tv pine new indicator` is unreliable:** It creates a new unsaved tab. The editor doesn't have a save target, so "Save and add" may fail or save to the wrong tab. Always `open` an existing script first, then overwrite its content.
-
 ## Performance Constraints (Free Plan)
 
 - **20 second timeout** per bar calculation
@@ -179,3 +180,13 @@ sleep 3 && tv state
 - **2 indicators per chart**
 - **500 max** for boxes, labels, lines each
 - O(n²) operations (sorting) on every historical bar will timeout — only compute expensive operations on `barstate.islast`
+
+## Important Notes
+
+- Always compile after every change — never claim "done" without a clean compile
+- Always check runtime after compilation — compilation success ≠ runtime success
+- Use `tv pine console` to read `log.info()` debug output
+- `tv pine get` can return 200KB+ for complex scripts — avoid unless editing
+- `tv pine analyze` and `tv pine check` work without a chart (offline tools)
+- `tv pine console` does NOT show runtime errors (RE codes) — see Runtime Debugging section
+- **NEVER create labels/boxes on every historical bar** — they exhaust the 500 limit. Only create drawing objects on `barstate.islast`

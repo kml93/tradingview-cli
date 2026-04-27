@@ -303,7 +303,11 @@ export async function compile() {
           saveBtn = btns[i];
         }
       }
-      if (fallback) { fallback.click(); return fallback.textContent.trim(); }
+      // Try data-qa-id selector for icon-only button
+      if (!fallback) {
+        fallback = document.querySelector('[data-qa-id="add-script-to-chart"]');
+      }
+      if (fallback) { fallback.click(); return 'Add to chart'; }
       if (saveBtn) { saveBtn.click(); return 'Pine Save'; }
       return null;
     })()
@@ -456,6 +460,9 @@ export async function smartCompile() {
         if (!updateBtn && /^update on chart$/i.test(text)) updateBtn = btns[i];
         if (!saveBtn && btns[i].className.indexOf('saveButton') !== -1 && btns[i].offsetParent !== null) saveBtn = btns[i];
       }
+      // Try data-qa-id selector for icon-only buttons
+      if (!addBtn) addBtn = document.querySelector('[data-qa-id="add-script-to-chart"]');
+      if (!updateBtn) updateBtn = document.querySelector('[data-qa-id="update-script-on-chart"]');
       if (addBtn) { addBtn.click(); return 'Add to chart'; }
       if (updateBtn) { updateBtn.click(); return 'Update on chart'; }
       if (saveBtn) { saveBtn.click(); return 'Pine Save'; }
