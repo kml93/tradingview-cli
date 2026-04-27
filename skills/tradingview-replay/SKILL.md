@@ -1,5 +1,5 @@
 ---
-name: tv-replay
+name: tradingview-replay
 description: Practice trading in TradingView replay mode — step through historical bars, take trades, track P&L. Use when practicing entries/exits, backtesting manually, or replaying historical price action.
 ---
 

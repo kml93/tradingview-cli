@@ -1,5 +1,5 @@
 ---
-name: tv-pine
+name: tradingview-pine
 description: Pine Script development loop in TradingView — write, inject, compile, fix errors, iterate. Use when developing, debugging, or modifying Pine Script indicators or strategies.
 ---
 

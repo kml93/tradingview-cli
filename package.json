@@ -1,21 +1,18 @@
 {
-  "name": "tradingview-skills",
+  "name": "tradingview-cli",
   "version": "1.0.0",
-  "description": "CLI and Claude Code skills for TradingView Desktop via Chrome DevTools Protocol",
+  "description": "CLI and agent skills for TradingView Desktop via Chrome DevTools Protocol",
   "type": "module",
   "bin": {
     "tv": "src/cli/index.js"
   },
   "scripts": {
-    "postinstall": "node scripts/postinstall.js",
-    "tv": "node src/cli/index.js",
-    "skills-install": "node scripts/postinstall.js",
-    "test": "bun test tests/pine_analyze.test.js tests/cli.test.js",
-    "test:cli": "bun test tests/cli.test.js"
+    "tv": "bun src/cli/index.js || node src/cli/index.js",
+    "test": "bun test tests/pine_analyze.test.js tests/cli.test.js || node --test tests/pine_analyze.test.js tests/cli.test.js",
+    "test:cli": "bun test tests/cli.test.js || node --test tests/cli.test.js"
   },
   "files": [
     "src/",
-    "scripts/postinstall.js",
     "skills/",
     "LICENSE"
   ],

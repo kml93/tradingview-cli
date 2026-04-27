@@ -1,5 +1,5 @@
 ---
-name: tv
+name: tradingview
 description: TradingView Desktop control via CLI. Use when working with charts, Pine Script, indicators, replay, screenshots, price data, or any TradingView interaction. Trigger phrases: "tradingview", "my chart", "pine script", "tv", "screenshot chart", "what's the price", "change symbol", "indicators".
 ---
 
@@ -46,10 +46,10 @@ tv search <QUERY>                 # search symbols
 - `tv range --from 1700000000 --to 1710000000` → zoom to range
 
 ### "Work on Pine Script"
-→ Use the tv-pine skill for the full development loop
+→ Use the tradingview-pine skill for the full development loop
 
 ### "Practice trading"
-→ Use the tv-replay skill for replay mode
+→ Use the tradingview-replay skill for replay mode
 
 ### "Draw on chart"
 ```bash
