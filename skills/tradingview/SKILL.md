@@ -99,6 +99,39 @@ tv screenshot -r strategy_tester  # strategy tester panel
 - Prefer `tv screenshot` for visual context over large data pulls
 - Call `tv state` once at start, reuse entity IDs from the result
 - Avoid `tv pine get` on complex scripts (can return 200KB+)
+- **Free plan limit**: 2 indicators per chart max. Remove indicators before adding new ones.
+
+## Indicator Management Gotchas
+
+- `tv indicator add --name "X"` only works for built-in/community indicators, NOT user scripts
+- To add a user script: use the Pine Editor workflow (`tv pine set` → `tv pine compile` → click "Add to chart")
+- `tv indicator remove --id <id>` is reliable — always clean up before adding to avoid hitting the 2-indicator limit
+- `tv state` shows entity IDs — always capture these after `tv state` for subsequent remove/toggle operations
+
+## `tv ui eval` — JavaScript Execution
+
+Execute arbitrary JS on the TradingView page. Useful for clicking buttons that the CLI can't reach.
+
+```bash
+# Basic usage
+tv ui eval --js "document.title"
+
+# Click a button by text
+tv ui eval --js "const target = [...document.querySelectorAll('button')].find(b => b.textContent.includes('Add to chart')); if (target) { target.click(); 'Clicked'; } else { 'Not found'; }"
+```
+
+**CRITICAL: Variable naming** — `tv ui eval` persists JS context between calls. Never reuse variable names:
+```bash
+# ❌ FAILS on second call — 'btns' already declared
+tv ui eval --js "const btns = [...document.querySelectorAll('button')]; btns.length"
+
+# ✅ Use unique names each call
+tv ui eval --js "const allButtons = [...document.querySelectorAll('button')]; allButtons.length"
+```
+
+## Screenshot Caveat
+
+CDN URLs returned by `tv screenshot` may be cached. When comparing screenshots, rely on the local file path, not the CDN URL. Use `Read` tool on the local path to view the image.
 
 ## Indicator Names
 
